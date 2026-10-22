@@ -1,0 +1,1090 @@
+<title>NuStream Field Capture</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Dark-first field tool: one column, fixed header, scrolling view stack. */
+  :root {
+    --bg: #0A1420;
+    --surface: #111E2C;
+    --surface-2: #17293B;
+    --line: #24394F;
+    --ink: #E9F1F8;
+    --ink-dim: #8CA3B8;
+    --accent: #38BDF8;
+    --accent-ink: #04202F;
+    --good: #34D399;
+    --warn: #FBBF24;
+    --bad: #F87171;
+    --font-display: "IBM Plex Sans Condensed", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    --font-data: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+    margin: 0; padding: 0;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+    background: var(--surface); z-index: 20;
+  }
+
+  .shell { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; min-height: 100%; }
+
+  header {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--surface); border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 12px;
+    padding-block: 10px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  header img { height: 22px; width: auto; flex: 0 0 auto; }
+  header .who { margin-left: auto; text-align: right; min-width: 0; }
+  header .who b { display: block; font-size: 13px; font-weight: 600; }
+  header .who span { display: block; font-size: 11px; color: var(--ink-dim); font-family: var(--font-data); }
+
+  main {
+    flex: 1 1 auto;
+    padding-block: 18px 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-direction: column; gap: 16px;
+  }
+
+  nav.tabs {
+    position: sticky; bottom: 0; z-index: 10;
+    background: var(--surface); border-top: 1px solid var(--line);
+    display: flex;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  nav.tabs button {
+    flex: 1 1 0; appearance: none; background: none; border: 0; cursor: pointer;
+    padding: 13px 4px; color: var(--ink-dim);
+    font-family: var(--font-display); font-size: 12px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    border-top: 2px solid transparent; margin-top: -1px;
+  }
+  nav.tabs button[aria-current="true"] { color: var(--accent); border-top-color: var(--accent); }
+
+  h1 { font-family: var(--font-display); font-size: 25px; font-weight: 700; margin: 0; text-wrap: balance; line-height: 1.15; }
+  h2 { font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
+       text-transform: uppercase; color: var(--ink-dim); margin: 0 0 2px; }
+  p { margin: 0; }
+  .dim { color: var(--ink-dim); font-size: 13px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  }
+
+  button.primary, button.ghost, button.danger {
+    appearance: none; border-radius: 10px; cursor: pointer; width: 100%;
+    font-family: var(--font-body); font-size: 16px; font-weight: 600; padding: 15px 16px;
+  }
+  button.primary { background: var(--accent); color: var(--accent-ink); border: 0; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  button.danger { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible, input:focus-visible, .pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .row2 { display: flex; gap: 10px; }
+  .row2 > * { flex: 1 1 0; min-width: 0; }
+
+  label.field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--ink-dim); }
+  input[type="text"], input[type="password"] {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px;
+    color: var(--ink); font-family: var(--font-body); font-size: 16px; padding: 13px 13px; width: 100%;
+  }
+  input[type="file"] { display: none; }
+
+  .pick {
+    appearance: none; text-align: left; width: 100%; cursor: pointer;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 13px 14px; color: var(--ink); display: flex; gap: 12px; align-items: center;
+  }
+  .pick[aria-pressed="true"] { border-color: var(--accent); background: #0E2838; }
+  .pick .grow { flex: 1 1 auto; min-width: 0; }
+  .pick .t { font-weight: 600; font-size: 15px; }
+  .pick .s { font-size: 12.5px; color: var(--ink-dim); }
+  .seq {
+    flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%;
+    background: var(--surface); border: 1px solid var(--line);
+    display: grid; place-items: center;
+    font-family: var(--font-data); font-size: 12px; color: var(--ink-dim);
+  }
+  .seq.done { background: var(--good); color: #04231A; border-color: var(--good); font-weight: 600; }
+
+  .chip {
+    display: inline-block; font-family: var(--font-display); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 7px; border-radius: 5px;
+    background: var(--surface-2); color: var(--ink-dim); border: 1px solid var(--line);
+  }
+  .chip.good { color: var(--good); border-color: #1C5B48; background: #0B2A22; }
+  .chip.warn { color: var(--warn); border-color: #5C4616; background: #2A2009; }
+  .chip.bad  { color: var(--bad);  border-color: #5E2626; background: #2B1212; }
+  .chip.sim  { color: var(--accent); border-color: #1B4C6A; background: #082637; }
+
+  .kv { display: grid; grid-template-columns: 1fr auto; gap: 7px 14px; font-size: 14px; }
+  .kv dt { color: var(--ink-dim); min-width: 0; }
+  .kv dd { margin: 0; font-family: var(--font-data); font-variant-numeric: tabular-nums; text-align: right; }
+
+  .big { display: flex; gap: 10px; }
+  .big > div {
+    flex: 1 1 0; min-width: 0; background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 12px 11px;
+  }
+  .big .n { font-family: var(--font-display); font-size: 29px; font-weight: 700; line-height: 1;
+            font-variant-numeric: tabular-nums; }
+  .big .l { font-size: 11.5px; color: var(--ink-dim); margin-top: 5px; line-height: 1.3; }
+
+  .gap-card { border-color: var(--warn); background: #231B07; }
+  .gap-card .n { color: var(--warn); }
+
+  .bar { height: 9px; border-radius: 5px; background: var(--surface-2); overflow: hidden; display: flex; }
+  .bar i { display: block; height: 100%; }
+  .bar i.p { background: var(--accent); }
+  .bar i.c { background: var(--bad); }
+  .bar i.o { background: #4B6076; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--ink-dim); }
+  .legend b { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: baseline; }
+
+  .thumb { width: 100%; max-width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; }
+
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .item {
+    display: flex; gap: 10px; align-items: baseline; justify-content: space-between;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  }
+  .item .nm { font-size: 14px; min-width: 0; }
+  .item .fc { font-family: var(--font-data); font-size: 13px; color: var(--ink-dim); flex: 0 0 auto; }
+  .item.miss { border-color: #5E2626; background: #210F0F; }
+  .item.miss .nm { color: var(--bad); }
+
+  .banner {
+    font-size: 12.5px; color: var(--ink-dim); background: var(--surface-2);
+    border: 1px dashed var(--line); border-radius: 9px; padding: 10px 12px;
+  }
+  .spin {
+    width: 15px; height: 15px; border-radius: 50%; display: inline-block; vertical-align: -2px;
+    border: 2px solid var(--line); border-top-color: var(--accent); animation: sp 0.8s linear infinite;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } * { transition: none !important; } }
+
+  .steps { display: flex; flex-direction: column; gap: 7px; }
+  .step { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; }
+  .step .mk { flex: 0 0 auto; width: 17px; text-align: center; font-family: var(--font-data); font-size: 13px; }
+  .step.ok .mk { color: var(--good); }
+  .step.no .mk { color: var(--bad); }
+  .step.wa .mk { color: var(--warn); }
+  .step.run .mk { color: var(--ink-dim); }
+  .step small { display: block; color: var(--ink-dim); font-size: 12px; }
+</style>
+
+<div class="shell">
+  <header>
+    <img src="nslogo.svg" alt="NuStream">
+    <div class="who" id="who" hidden><b id="who-name"></b><span id="who-role"></span></div>
+  </header>
+
+  <main id="main"></main>
+
+  <nav class="tabs" id="tabs" hidden>
+    <button id="tab-route" type="button">Route</button>
+    <button id="tab-dash" type="button">Dashboard</button>
+    <button id="tab-out" type="button">Sign out</button>
+  </nav>
+</div>
+
+<input type="file" id="shot" accept="image/*" capture="environment">
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------------------------------------------------------- data */
+
+  var USERS = {
+    ibrahim:  { pin: "1234", name: "Ibrahim Qureshi", role: "Order Booker", routeId: "RWP-04" },
+    saad:     { pin: "1234", name: "Saad Mehmood",    role: "Order Booker", routeId: "ISB-02" },
+    manager:  { pin: "1234", name: "Area Sales Manager", role: "Supervisor", routeId: null }
+  };
+
+  var ROUTES = {
+    "RWP-04": {
+      name: "RWP-04 · Raja Bazaar belt", town: "Rawalpindi",
+      stores: [
+        { id: "r1", name: "Al-Madina Karyana Store", addr: "Bohar Bazaar, Raja Bazaar", km: 0.4,
+          assets: [{ t: "Single-door visi cooler", m: "Helkama 380L", n: 1 }], last: "15 Oct" },
+        { id: "r2", name: "Shaheen General Store", addr: "Moti Bazaar", km: 0.9,
+          assets: [{ t: "Single-door visi cooler", m: "Varioline 12 CFT", n: 1 },
+                   { t: "Chest cooler", m: "Varioline 8 CFT", n: 1 }], last: "15 Oct" },
+        { id: "r3", name: "New Capital Cold Corner", addr: "Committee Chowk", km: 1.8,
+          assets: [{ t: "Double-door visi cooler", m: "Helkama 750L", n: 1 }], last: "14 Oct" },
+        { id: "r4", name: "Bhatti Store", addr: "Sadiqabad, Murree Road", km: 3.1,
+          assets: [{ t: "Single-door visi cooler", m: "Varioline 12 CFT", n: 1 }], last: "15 Oct" },
+        { id: "r5", name: "Usman Tuck Shop", addr: "Satellite Town, Block C", km: 4.6,
+          assets: [], last: "08 Oct" }
+      ]
+    },
+    "ISB-02": {
+      name: "ISB-02 · G-9 / G-10", town: "Islamabad",
+      stores: [
+        { id: "i1", name: "Karachi Karyana", addr: "Karachi Company, G-9 Markaz", km: 0.6,
+          assets: [{ t: "Double-door visi cooler", m: "Helkama 750L", n: 1 }], last: "16 Oct" },
+        { id: "i2", name: "Al-Rehman Store", addr: "G-10 Markaz", km: 1.4,
+          assets: [{ t: "Single-door visi cooler", m: "Helkama 380L", n: 1 }], last: "16 Oct" },
+        { id: "i3", name: "Chaudhry General Store", addr: "G-9/4 Service Road", km: 2.2,
+          assets: [{ t: "Single-door visi cooler", m: "Varioline 12 CFT", n: 1 }], last: "15 Oct" },
+        { id: "i4", name: "Metro Point", addr: "G-10/2 Main Double Road", km: 3.5,
+          assets: [{ t: "Double-door visi cooler", m: "Helkama 750L", n: 1 },
+                   { t: "Single-door visi cooler", m: "Helkama 380L", n: 1 }], last: "14 Oct" }
+      ]
+    }
+  };
+
+  var MSL = ["Pepsi", "7UP", "Mountain Dew", "Mirinda", "Sting", "Aquafina"];
+
+  var PEPSI_BRANDS = ["Pepsi", "Pepsi Zero Sugar", "7UP", "7UP Zero Sugar", "7UP Mint Lemonade",
+    "Mountain Dew", "Mirinda", "Sting", "Slice", "Gatorade", "ReVive", "Aquafina"];
+  var RIVAL_BRANDS = ["Coca-Cola", "Coke Zero", "Diet Coke", "Sprite", "Fanta", "Roar",
+    "Dasani", "Cappy", "Fuzetea", "Kinley"];
+  var OTHER_BRANDS = ["NEXT", "Pakola", "Gourmet Cola", "local water", "local juice"];
+
+  var CLAIMS = [
+    { k: "good", label: "Good — full and clean", pct: 92 },
+    { k: "fair", label: "Fair — a few gaps", pct: 74 },
+    { k: "poor", label: "Poor — needs work", pct: 48 }
+  ];
+
+  /* ---------------------------------------------------------------- state */
+
+  var S = {
+    user: null, userKey: null, ready: null,
+    storeId: null, claim: null,
+    visits: [], tab: "route", busy: false, pending: null
+  };
+
+  var dbNs = null, sampleNs = null, bridgePromise = null;
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function route() { return S.user && S.user.routeId ? ROUTES[S.user.routeId] : null; }
+  function storeById(id) {
+    var out = null;
+    Object.keys(ROUTES).forEach(function (rk) {
+      ROUTES[rk].stores.forEach(function (s) { if (s.id === id) out = s; });
+    });
+    return out;
+  }
+  function visitsFor(id) { return S.visits.filter(function (v) { return v.storeId === id; }); }
+  function pct(n) { return Math.max(0, Math.min(100, Math.round(n || 0))); }
+
+  /* ---------------------------------------------------------------- bridge */
+
+  function waitForBridge(ms) {
+    return new Promise(function (resolve) {
+      if (window.claude && typeof window.claude.use === "function") { resolve(window.claude); return; }
+      var t0 = Date.now();
+      var iv = setInterval(function () {
+        if (window.claude && typeof window.claude.use === "function") { clearInterval(iv); resolve(window.claude); }
+        else if (Date.now() - t0 > ms) { clearInterval(iv); resolve(null); }
+      }, 120);
+    });
+  }
+
+  function bridge() {
+    if (bridgePromise) return bridgePromise;
+    bridgePromise = waitForBridge(12000).then(function (c) {
+      if (!c) return null;
+      return Promise.all([
+        c.use("db").catch(function () { return null; }),
+        c.use("sample").catch(function () { return null; })
+      ]).then(function (pair) {
+        dbNs = pair[0];
+        var sp = pair[1];
+        if (!sp) return null;
+        return Promise.resolve(sp.limits ? sp.limits() : { images: false }).then(function (lim) {
+          sampleNs = (lim && lim.images) ? sp : null;
+          return null;
+        }).catch(function () { sampleNs = null; return null; });
+      });
+    }).catch(function () { return null; });
+    return bridgePromise;
+  }
+
+  function loadVisits() {
+    return bridge().then(function () {
+      if (!dbNs) return;
+      try {
+        var q = dbNs.collection("visits");
+        return Promise.resolve(q.get()).then(function (res) {
+          var docs = [];
+          if (!res) return;
+          if (Array.isArray(res)) docs = res;
+          else if (Array.isArray(res.docs)) docs = res.docs;
+          else if (Array.isArray(res.items)) docs = res.items;
+          var out = [];
+          docs.forEach(function (d) {
+            var val = d && typeof d.data === "function" ? d.data() : (d && d.data ? d.data : d);
+            if (val && val.storeId) out.push(val);
+          });
+          if (out.length) {
+            S.visits = out.sort(function (a, b) { return a.ts - b.ts; });
+          }
+        }).catch(function () {});
+      } catch (e) { /* shape mismatch: stay in memory */ }
+    });
+  }
+
+  function saveVisit(v) {
+    if (!dbNs) return;
+    try {
+      Promise.resolve(dbNs.collection("visits").doc(v.id).set(v)).catch(function () {});
+    } catch (e) { /* ignore */ }
+  }
+
+  /* ---------------------------------------------------------------- imaging */
+
+  function toCanvas(img, maxEdge) {
+    var sc = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+    var c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(img.naturalWidth * sc));
+    c.height = Math.max(1, Math.round(img.naturalHeight * sc));
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  }
+  function grey(c) {
+    var d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    var g = new Float32Array(c.width * c.height);
+    for (var i = 0, p = 0; i < d.length; i += 4, p++) g[p] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    return g;
+  }
+  function blurScore(g, w, h) {
+    var v = [], i, k;
+    for (var y = 1; y < h - 1; y++) for (var x = 1; x < w - 1; x++) {
+      i = y * w + x;
+      v.push(g[i - w] + g[i + w] + g[i - 1] + g[i + 1] - 4 * g[i]);
+    }
+    if (!v.length) return 0;
+    var m = 0; for (k = 0; k < v.length; k++) m += v[k]; m /= v.length;
+    var s = 0; for (k = 0; k < v.length; k++) { var dd = v[k] - m; s += dd * dd; }
+    return s / v.length;
+  }
+  function dhash(img) {
+    var c = document.createElement("canvas"); c.width = 9; c.height = 8;
+    c.getContext("2d").drawImage(img, 0, 0, 9, 8);
+    var g = grey(c), bits = "";
+    for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) bits += g[y * 9 + x] > g[y * 9 + x + 1] ? "1" : "0";
+    return bits;
+  }
+  function hamming(a, b) { var n = 0; for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; }
+  function toBlob(img, edge, q) {
+    return new Promise(function (res) {
+      var c = toCanvas(img, edge);
+      if (c.toBlob) c.toBlob(function (b) { res(b); }, "image/jpeg", q); else res(null);
+    });
+  }
+  function toThumb(img) {
+    try { return toCanvas(img, 120).toDataURL("image/jpeg", 0.5); } catch (e) { return null; }
+  }
+
+  /* ---------------------------------------------------------------- analysis */
+
+  function prompt() {
+    return "You are reading a photograph of a retail beverage cooler in Pakistan for a PepsiCo bottler.\n\n" +
+      "PepsiCo brands: " + PEPSI_BRANDS.join(", ") + ".\n" +
+      "Coca-Cola brands: " + RIVAL_BRANDS.join(", ") + ".\n" +
+      "Other third-party brands seen in Pakistan: " + OTHER_BRANDS.join(", ") + ".\n\n" +
+      "Identify brands, not pack sizes. Pack size is unreliable from a photograph; do not guess it.\n\n" +
+      "Return ONLY JSON:\n" +
+      '{"isCooler":boolean,"rejectReason":string,' +
+      '"pepsi":[{"name":string,"facings":number}],' +
+      '"competitor":[{"name":string,"facings":number}],' +
+      '"other":[{"name":string,"facings":number}],' +
+      '"purityPct":number,"fullnessPct":number,' +
+      '"confidence":"high"|"medium"|"low","note":string}\n\n' +
+      "purityPct = PepsiCo facings as a percentage of all visible facings.\n" +
+      "fullnessPct = how full the cooler is against its visible shelf capacity.\n" +
+      "If it is not a beverage cooler or shelf, set isCooler false, give a one-line rejectReason, " +
+      "return empty arrays and zeros.\nIf unsure, lower the confidence rather than inventing detail.";
+  }
+
+  function scripted(bits, store) {
+    var seed = 0;
+    for (var i = 0; i < bits.length; i++) seed = (seed * 31 + (bits[i] === "1" ? 7 : 3)) % 100003;
+    function r(n) { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; }
+    var purity = 52 + r(40);
+    var full = 38 + r(52);
+    var pep = [], comp = [], oth = [];
+    var pool = ["Pepsi", "7UP", "Mountain Dew", "Mirinda", "Sting", "Aquafina", "Slice"];
+    for (var j = 0; j < pool.length; j++) if (r(10) > 2) pep.push({ name: pool[j], facings: 2 + r(7) });
+    if (!pep.length) pep.push({ name: "Pepsi", facings: 4 });
+    if (purity < 80) comp.push({ name: r(2) ? "Coca-Cola" : "Sprite", facings: 1 + r(5) });
+    if (purity < 65) comp.push({ name: "Roar", facings: 1 + r(3) });
+    if (purity < 72) oth.push({ name: "NEXT", facings: 1 + r(4) });
+    return {
+      isCooler: true, pepsi: pep, competitor: comp, other: oth,
+      purityPct: purity, fullnessPct: full, confidence: "medium",
+      note: "Simulated result for " + store.name + ". No photograph was analysed."
+    };
+  }
+
+  function analyse(blob, bits, store) {
+    return bridge().then(function () {
+      if (!sampleNs) return { data: scripted(bits, store), mode: "sim" };
+      return sampleNs.json(prompt(), { images: [blob], modelTier: "default" })
+        .then(function (d) { return { data: d, mode: "live" }; })
+        .catch(function (err) {
+          var out = scripted(bits, store);
+          out.note = "Live analysis failed (" + ((err && err.code) || "unknown") + "). " + out.note;
+          return { data: out, mode: "sim" };
+        });
+    });
+  }
+
+  /* ---------------------------------------------------------------- render */
+
+  function clear() { var m = $("main"); while (m.firstChild) m.removeChild(m.firstChild); return m; }
+
+  function chrome() {
+    var on = !!S.user;
+    $("who").hidden = !on;
+    $("tabs").hidden = !on;
+    if (on) {
+      $("who-name").textContent = S.user.name;
+      $("who-role").textContent = S.user.role + (S.user.routeId ? " · " + S.user.routeId : "");
+      $("tab-route").hidden = !S.user.routeId;
+      $("tab-route").setAttribute("aria-current", String(S.tab === "route"));
+      $("tab-dash").setAttribute("aria-current", String(S.tab === "dash"));
+    }
+  }
+
+  function render() {
+    chrome();
+    var m = clear();
+    if (!S.user) return viewLogin(m);
+    if (S.tab === "dash") return viewDash(m);
+    if (S.user.routeId && S.ready === null) return viewReady(m);
+    if (S.user.routeId && S.ready === false) return viewStood(m);
+    if (S.pending) return viewResult(m);
+    if (S.storeId) return viewStore(m);
+    if (!S.user.routeId) { S.tab = "dash"; return viewDash(m); }
+    return viewRoute(m);
+  }
+
+  /* -------- login */
+
+  function viewLogin(m) {
+    var c = el("div", "card");
+    c.appendChild(el("h1", null, "Field capture"));
+    c.appendChild(el("p", "dim", "Sign in to load today’s journey plan."));
+
+    var u = el("label", "field"); u.appendChild(document.createTextNode("User ID"));
+    var ui = el("input"); ui.type = "text"; ui.id = "f-user"; ui.autocapitalize = "none";
+    ui.autocomplete = "username"; ui.spellcheck = false; u.appendChild(ui);
+
+    var p = el("label", "field"); p.appendChild(document.createTextNode("PIN"));
+    var pi = el("input"); pi.type = "password"; pi.id = "f-pin";
+    pi.autocomplete = "current-password"; pi.inputMode = "numeric"; p.appendChild(pi);
+
+    c.appendChild(u); c.appendChild(p);
+
+    var err = el("p", "dim"); err.id = "f-err"; err.style.color = "var(--bad)"; err.hidden = true;
+    c.appendChild(err);
+
+    var go = el("button", "primary", "Sign in"); go.type = "button";
+    go.onclick = function () {
+      var k = (ui.value || "").trim().toLowerCase();
+      var rec = USERS[k];
+      if (!rec || rec.pin !== (pi.value || "").trim()) {
+        err.hidden = false; err.textContent = "That user ID and PIN do not match. Check the demo logins below.";
+        return;
+      }
+      S.user = rec; S.userKey = k; S.ready = rec.routeId ? null : true;
+      S.tab = rec.routeId ? "route" : "dash";
+      loadVisits().then(render);
+      render();
+    };
+    c.appendChild(go);
+    m.appendChild(c);
+
+    var d = el("div", "card");
+    d.appendChild(el("h2", null, "Demo logins"));
+    [["ibrahim", "Order booker · Rawalpindi route RWP-04"],
+     ["saad", "Order booker · Islamabad route ISB-02"],
+     ["manager", "Supervisor · dashboard only"]].forEach(function (row) {
+      var b = el("button", "pick"); b.type = "button";
+      var g = el("div", "grow");
+      g.appendChild(el("div", "t", row[0] + "  /  1234"));
+      g.appendChild(el("div", "s", row[1]));
+      b.appendChild(g);
+      b.onclick = function () { ui.value = row[0]; pi.value = "1234"; err.hidden = true; };
+      d.appendChild(b);
+    });
+    d.appendChild(el("p", "dim", "Credentials are fictional and checked in the page. Nothing is sent anywhere."));
+    m.appendChild(d);
+  }
+
+  /* -------- readiness */
+
+  function viewReady(m) {
+    var c = el("div", "card");
+    c.appendChild(el("h2", null, "Shift start"));
+    c.appendChild(el("h1", null, "Are you ready to work?"));
+    var r = route();
+    c.appendChild(el("p", "dim", r.name + " · " + r.stores.length + " outlets planned today."));
+    var row = el("div", "row2");
+    var yes = el("button", "primary", "Yes"); yes.type = "button";
+    yes.onclick = function () { S.ready = true; render(); };
+    var no = el("button", "ghost", "No"); no.type = "button";
+    no.onclick = function () { S.ready = false; render(); };
+    row.appendChild(yes); row.appendChild(no);
+    c.appendChild(row);
+    m.appendChild(c);
+  }
+
+  function viewStood(m) {
+    var c = el("div", "card");
+    c.appendChild(el("h1", null, "Shift not started"));
+    c.appendChild(el("p", "dim", "Your journey plan stays locked until you start. Your supervisor can see that today’s route has not begun."));
+    var b = el("button", "primary", "I’m ready now"); b.type = "button";
+    b.onclick = function () { S.ready = true; render(); };
+    c.appendChild(b);
+    m.appendChild(c);
+  }
+
+  /* -------- route */
+
+  function viewRoute(m) {
+    var r = route();
+    var head = el("div");
+    head.appendChild(el("h2", null, "Today’s journey plan"));
+    head.appendChild(el("h1", null, r.name));
+    m.appendChild(head);
+
+    m.appendChild(el("div", "banner",
+      "Location services are not available in this build, so outlets follow your planned call order. Distances are from the route plan."));
+
+    var done = 0;
+    var list = el("div", "card");
+    r.stores.forEach(function (s, i) {
+      var vs = visitsFor(s.id);
+      if (vs.length) done++;
+      var b = el("button", "pick"); b.type = "button";
+      var sq = el("div", "seq" + (vs.length ? " done" : ""), vs.length ? "✓" : String(i + 1));
+      var g = el("div", "grow");
+      g.appendChild(el("div", "t", s.name));
+      g.appendChild(el("div", "s", s.addr + " · " + s.km.toFixed(1) + " km"));
+      b.appendChild(sq); b.appendChild(g);
+      if (vs.length) {
+        var last = vs[vs.length - 1];
+        var ch = el("span", "chip " + (last.purityPct >= 85 ? "good" : last.purityPct >= 65 ? "warn" : "bad"),
+          pct(last.purityPct) + "%");
+        b.appendChild(ch);
+      }
+      b.onclick = function () { S.storeId = s.id; S.claim = null; render(); };
+      list.appendChild(b);
+    });
+    m.appendChild(list);
+
+    var p = el("div", "card");
+    p.appendChild(el("h2", null, "Progress"));
+    var big = el("div", "big");
+    [[done, "Outlets captured"], [r.stores.length - done, "Still to call"]].forEach(function (x) {
+      var d = el("div");
+      d.appendChild(el("div", "n", String(x[0])));
+      d.appendChild(el("div", "l", x[1]));
+      big.appendChild(d);
+    });
+    p.appendChild(big);
+    m.appendChild(p);
+  }
+
+  /* -------- store */
+
+  function viewStore(m) {
+    var s = storeById(S.storeId);
+    var back = el("button", "ghost", "‹  Back to route"); back.type = "button";
+    back.onclick = function () { S.storeId = null; S.claim = null; render(); };
+    m.appendChild(back);
+
+    var c = el("div", "card");
+    c.appendChild(el("h2", null, "Outlet"));
+    c.appendChild(el("h1", null, s.name));
+    c.appendChild(el("p", "dim", s.addr + " · " + route().town));
+
+    var dl = el("dl", "kv");
+    function kv(k, v) { dl.appendChild(el("dt", null, k)); dl.appendChild(el("dd", null, v)); }
+    kv("Distance on route", s.km.toFixed(1) + " km");
+    kv("Last call", s.last);
+    kv("Cooler assets", s.assets.length ? String(s.assets.reduce(function (a, x) { return a + x.n; }, 0)) : "None");
+    c.appendChild(dl);
+    m.appendChild(c);
+
+    if (s.assets.length) {
+      var a = el("div", "card");
+      a.appendChild(el("h2", null, "Assets on site"));
+      var li = el("div", "list");
+      s.assets.forEach(function (x) {
+        var it = el("div", "item");
+        var nm = el("div", "nm"); nm.appendChild(document.createTextNode(x.t));
+        var sm = el("small"); sm.className = "dim"; sm.textContent = x.m;
+        nm.appendChild(sm);
+        it.appendChild(nm);
+        it.appendChild(el("div", "fc", "×" + x.n));
+        li.appendChild(it);
+      });
+      a.appendChild(li);
+      a.appendChild(el("p", "dim", "These are recorded as placed. Nothing in the system knows what is inside them."));
+      m.appendChild(a);
+    } else {
+      var w = el("div", "card");
+      w.appendChild(el("h2", null, "Assets on site"));
+      w.appendChild(el("p", "dim", "No NuStream-tracked cooler at this outlet. Capture is disabled."));
+      m.appendChild(w);
+      return;
+    }
+
+    var q = el("div", "card");
+    q.appendChild(el("h2", null, "Before the photo"));
+    q.appendChild(el("p", null, "How does the cooler look right now?"));
+    CLAIMS.forEach(function (cl) {
+      var b = el("button", "pick"); b.type = "button";
+      b.setAttribute("aria-pressed", String(S.claim === cl.k));
+      var g = el("div", "grow");
+      g.appendChild(el("div", "t", cl.label));
+      b.appendChild(g);
+      b.onclick = function () { S.claim = cl.k; render(); };
+      q.appendChild(b);
+    });
+    q.appendChild(el("p", "dim", "Your answer is recorded before the photograph is taken, and compared with it afterwards."));
+    m.appendChild(q);
+
+    var cap = el("div", "card");
+    var add = el("button", "primary", "Add picture"); add.type = "button";
+    add.disabled = !S.claim;
+    add.onclick = function () { $("shot").click(); };
+    cap.appendChild(add);
+    if (!S.claim) cap.appendChild(el("p", "dim", "Answer the question above first."));
+    m.appendChild(cap);
+  }
+
+  /* -------- capture pipeline */
+
+  function steps(container, defs) {
+    var wrap = el("div", "steps");
+    defs.forEach(function (d) {
+      var s = el("div", "step " + d.c);
+      s.appendChild(el("div", "mk", d.m));
+      var b = el("div");
+      b.appendChild(document.createTextNode(d.t));
+      if (d.s) { var sm = el("small"); sm.textContent = d.s; b.appendChild(sm); }
+      s.appendChild(b);
+      wrap.appendChild(s);
+    });
+    container.appendChild(wrap);
+  }
+
+  function handleShot(file) {
+    if (S.busy) return;
+    S.busy = true;
+    var store = storeById(S.storeId);
+    var claim = CLAIMS.filter(function (c) { return c.k === S.claim; })[0];
+
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+
+    img.onerror = function () { S.busy = false; alert0("That file could not be read as an image."); };
+    img.onload = function () {
+      var checks = [], ok = true;
+      var w = img.naturalWidth, h = img.naturalHeight;
+
+      if (Math.min(w, h) < 500) {
+        checks.push({ c: "wa", m: "!", t: "Resolution is low", s: w + " × " + h + " px. Detail may be missed." });
+      } else {
+        checks.push({ c: "ok", m: "✓", t: "Resolution", s: w + " × " + h + " px" });
+      }
+
+      var bits, bl;
+      try {
+        var cv = toCanvas(img, 480);
+        bl = blurScore(grey(cv), cv.width, cv.height);
+        bits = dhash(img);
+      } catch (e) {
+        S.busy = false;
+        alert0("The image could not be inspected on this device.");
+        return;
+      }
+
+      if (bl < 40) {
+        ok = false;
+        checks.push({ c: "no", m: "✕", t: "Too blurry to read", s: "Sharpness " + bl.toFixed(0) + ". Hold still and retake." });
+      } else if (bl < 120) {
+        checks.push({ c: "wa", m: "!", t: "Soft focus", s: "Sharpness " + bl.toFixed(0) + ". Usable, not ideal." });
+      } else {
+        checks.push({ c: "ok", m: "✓", t: "Sharp", s: "Sharpness " + bl.toFixed(0) });
+      }
+
+      var dupe = null;
+      S.visits.forEach(function (v) {
+        if (v.bits && hamming(v.bits, bits) <= 8) dupe = v;
+      });
+      if (dupe) {
+        ok = false;
+        checks.push({ c: "no", m: "✕", t: "Duplicate photograph",
+          s: "Matches the capture at " + dupe.storeName + ". Take a fresh one." });
+      } else {
+        checks.push({ c: "ok", m: "✓", t: "Not a duplicate", s: "No match against earlier captures." });
+      }
+
+      S.pending = {
+        stage: ok ? "run" : "blocked",
+        checks: checks, bits: bits, blur: bl, w: w, h: h,
+        thumb: toThumb(img), url: url, store: store, claim: claim,
+        file: file, img: img, result: null, mode: null
+      };
+      S.busy = false;
+      render();
+      if (ok) runAnalysis();
+    };
+    img.src = url;
+  }
+
+  function runAnalysis() {
+    var p = S.pending;
+    if (!p) return;
+    p.stage = "run";
+    render();
+    toBlob(p.img, 1600, 0.85).then(function (blob) {
+      return analyse(blob || p.file, p.bits, p.store);
+    }).then(function (res) {
+      var d = res.data || {};
+      if (d.isCooler === false) {
+        p.stage = "notcooler";
+        p.result = d; p.mode = res.mode;
+        render();
+        return;
+      }
+      var visit = {
+        id: p.store.id + "-" + Date.now(),
+        ts: Date.now(),
+        bookerId: S.userKey, bookerName: S.user.name,
+        routeId: S.user.routeId, storeId: p.store.id, storeName: p.store.name,
+        claimKey: p.claim.k, claimLabel: p.claim.label, claimPct: p.claim.pct,
+        purityPct: pct(d.purityPct), fullnessPct: pct(d.fullnessPct),
+        pepsi: d.pepsi || [], competitor: d.competitor || [], other: d.other || [],
+        confidence: d.confidence || "low", note: d.note || "",
+        mode: res.mode, bits: p.bits, blur: Math.round(p.blur), thumb: p.thumb
+      };
+      S.visits.push(visit);
+      saveVisit(visit);
+      p.stage = "done"; p.visit = visit; p.mode = res.mode;
+      render();
+    });
+  }
+
+  function alert0(msg) {
+    var m = clear();
+    var c = el("div", "card");
+    c.appendChild(el("h1", null, "Could not use that photo"));
+    c.appendChild(el("p", "dim", msg));
+    var b = el("button", "primary", "Back"); b.type = "button";
+    b.onclick = function () { S.pending = null; render(); };
+    c.appendChild(b);
+    m.appendChild(c);
+  }
+
+  /* -------- result */
+
+  function viewResult(m) {
+    var p = S.pending;
+    var c = el("div", "card");
+    c.appendChild(el("h2", null, p.store.name));
+
+    if (p.thumb) {
+      var im = el("img", "thumb"); im.src = p.url; im.alt = "The cooler photograph just captured";
+      c.appendChild(im);
+    }
+    c.appendChild(el("h2", null, "Image checks"));
+    steps(c, p.checks);
+    m.appendChild(c);
+
+    if (p.stage === "blocked") {
+      var b = el("div", "card");
+      b.appendChild(el("p", null, "This photograph did not pass. Retake it, or send it anyway and let the checks stand on record."));
+      var r2 = el("div", "row2");
+      var rt = el("button", "primary", "Retake"); rt.type = "button";
+      rt.onclick = function () { S.pending = null; render(); $("shot").click(); };
+      var ua = el("button", "ghost", "Use anyway"); ua.type = "button";
+      ua.onclick = function () { runAnalysis(); };
+      r2.appendChild(rt); r2.appendChild(ua);
+      b.appendChild(r2);
+      var bk = el("button", "ghost", "Back to outlet"); bk.type = "button";
+      bk.onclick = function () { S.pending = null; render(); };
+      b.appendChild(bk);
+      m.appendChild(b);
+      return;
+    }
+
+    if (p.stage === "run") {
+      var w = el("div", "card");
+      var h = el("p");
+      h.appendChild(el("span", "spin"));
+      h.appendChild(document.createTextNode("  Reading the cooler…"));
+      w.appendChild(h);
+      w.appendChild(el("p", "dim", "Identifying brands, counting facings and scoring purity and fullness."));
+      m.appendChild(w);
+      return;
+    }
+
+    if (p.stage === "notcooler") {
+      var nc = el("div", "card");
+      nc.appendChild(el("h1", null, "That is not a cooler"));
+      nc.appendChild(el("p", "dim", (p.result && p.result.rejectReason) || "The image does not show a beverage cooler or shelf."));
+      var rb = el("button", "primary", "Retake"); rb.type = "button";
+      rb.onclick = function () { S.pending = null; render(); $("shot").click(); };
+      nc.appendChild(rb);
+      var nb = el("button", "ghost", "Back to outlet"); nb.type = "button";
+      nb.onclick = function () { S.pending = null; render(); };
+      nc.appendChild(nb);
+      m.appendChild(nc);
+      return;
+    }
+
+    var v = p.visit;
+    var delta = v.claimPct - v.purityPct;
+
+    var hero = el("div", "card");
+    hero.appendChild(el("h2", null, "Reported against observed"));
+    var big = el("div", "big");
+    var d1 = el("div");
+    d1.appendChild(el("div", "n", v.claimPct + "%"));
+    d1.appendChild(el("div", "l", "You said: " + v.claimLabel.split(" — ")[0]));
+    var d2 = el("div");
+    d2.appendChild(el("div", "n", v.purityPct + "%"));
+    d2.appendChild(el("div", "l", "Photo shows"));
+    big.appendChild(d1); big.appendChild(d2);
+    if (Math.abs(delta) >= 8) {
+      var d3 = el("div", "gap-card");
+      d3.appendChild(el("div", "n", (delta > 0 ? "−" : "+") + Math.abs(delta)));
+      d3.appendChild(el("div", "l", delta > 0 ? "Points worse than reported" : "Points better than reported"));
+      big.appendChild(d3);
+    }
+    hero.appendChild(big);
+    m.appendChild(hero);
+
+    var res = el("div", "card");
+    var hd = el("div"); hd.style.display = "flex"; hd.style.gap = "8px"; hd.style.alignItems = "center";
+    hd.appendChild(el("h2", null, "Cooler read"));
+    var sp = el("span"); sp.style.marginLeft = "auto";
+    sp.appendChild(el("span", "chip " + (p.mode === "live" ? "good" : "sim"),
+      p.mode === "live" ? "Analysed" : "Simulated"));
+    sp.appendChild(document.createTextNode(" "));
+    sp.appendChild(el("span", "chip", v.confidence + " confidence"));
+    hd.appendChild(sp);
+    res.appendChild(hd);
+
+    var tot = 0;
+    function sum(a) { var n = 0; (a || []).forEach(function (x) { n += (x.facings || 0); }); return n; }
+    var np = sum(v.pepsi), nc2 = sum(v.competitor), no = sum(v.other);
+    tot = np + nc2 + no;
+    var bar = el("div", "bar");
+    function seg(cls, n) { if (!tot || !n) return; var i = el("i", cls); i.style.width = (n / tot * 100) + "%"; bar.appendChild(i); }
+    seg("p", np); seg("c", nc2); seg("o", no);
+    if (!tot) { var i0 = el("i", "o"); i0.style.width = "100%"; bar.appendChild(i0); }
+    res.appendChild(bar);
+    var lg = el("div", "legend");
+    [["p", "PepsiCo " + np], ["c", "Coca-Cola " + nc2], ["o", "Other " + no]].forEach(function (x) {
+      var s = el("span");
+      var b2 = el("b"); b2.style.background = x[0] === "p" ? "var(--accent)" : x[0] === "c" ? "var(--bad)" : "#4B6076";
+      s.appendChild(b2); s.appendChild(document.createTextNode(x[1] + " facings"));
+      lg.appendChild(s);
+    });
+    res.appendChild(lg);
+
+    var dl = el("dl", "kv");
+    dl.appendChild(el("dt", null, "Cooler purity")); dl.appendChild(el("dd", null, v.purityPct + "%"));
+    dl.appendChild(el("dt", null, "Cooler fullness")); dl.appendChild(el("dd", null, v.fullnessPct + "%"));
+    res.appendChild(dl);
+    if (v.note) res.appendChild(el("p", "dim", v.note));
+    m.appendChild(res);
+
+    var av = el("div", "card");
+    av.appendChild(el("h2", null, "Must-stock availability"));
+    var found = {};
+    (v.pepsi || []).forEach(function (x) {
+      MSL.forEach(function (b) { if ((x.name || "").toLowerCase().indexOf(b.toLowerCase()) === 0) found[b] = x.facings || 1; });
+    });
+    var li2 = el("div", "list");
+    MSL.forEach(function (b) {
+      var it = el("div", "item" + (found[b] ? "" : " miss"));
+      it.appendChild(el("div", "nm", b));
+      it.appendChild(el("div", "fc", found[b] ? "×" + found[b] : "missing"));
+      li2.appendChild(it);
+    });
+    av.appendChild(li2);
+    av.appendChild(el("p", "dim", "Judged at brand level. Pack size is not read from the photograph."));
+    m.appendChild(av);
+
+    if ((v.competitor || []).length || (v.other || []).length) {
+      var fo = el("div", "card");
+      fo.appendChild(el("h2", null, "Foreign product in your cooler"));
+      var li3 = el("div", "list");
+      (v.competitor || []).concat(v.other || []).forEach(function (x) {
+        var it = el("div", "item miss");
+        it.appendChild(el("div", "nm", x.name));
+        it.appendChild(el("div", "fc", "×" + (x.facings || 1)));
+        li3.appendChild(it);
+      });
+      fo.appendChild(li3);
+      m.appendChild(fo);
+    }
+
+    var nx = el("div", "card");
+    var n1 = el("button", "primary", "Next outlet"); n1.type = "button";
+    n1.onclick = function () { S.pending = null; S.storeId = null; S.claim = null; render(); };
+    nx.appendChild(n1);
+    var n2 = el("button", "ghost", "Open dashboard"); n2.type = "button";
+    n2.onclick = function () { S.pending = null; S.tab = "dash"; render(); };
+    nx.appendChild(n2);
+    m.appendChild(nx);
+  }
+
+  /* -------- dashboard */
+
+  function viewDash(m) {
+    m.appendChild((function () {
+      var h = el("div");
+      h.appendChild(el("h2", null, "Supervisor view"));
+      h.appendChild(el("h1", null, "Execution today"));
+      return h;
+    })());
+
+    if (!S.visits.length) {
+      var e = el("div", "card");
+      e.appendChild(el("h2", null, "Nothing captured yet"));
+      e.appendChild(el("p", "dim", "Once a booker photographs a cooler on their route, purity, fullness and the gap against what they reported appear here."));
+      if (S.user.routeId) {
+        var b = el("button", "primary", "Go to my route"); b.type = "button";
+        b.onclick = function () { S.tab = "route"; render(); };
+        e.appendChild(b);
+      }
+      m.appendChild(e);
+      return;
+    }
+
+    var n = S.visits.length;
+    function avg(f) { var s = 0; S.visits.forEach(function (v) { s += f(v); }); return s / n; }
+    var aPur = avg(function (v) { return v.purityPct; });
+    var aFul = avg(function (v) { return v.fullnessPct; });
+    var aCl = avg(function (v) { return v.claimPct; });
+    var gap = aCl - aPur;
+
+    var k = el("div", "card");
+    k.appendChild(el("h2", null, "Across " + n + " captured outlet" + (n > 1 ? "s" : "")));
+    var b1 = el("div", "big");
+    [[pct(aPur) + "%", "Average cooler purity", ""],
+     [pct(aFul) + "%", "Average fullness", ""]].forEach(function (x) {
+      var d = el("div");
+      d.appendChild(el("div", "n", x[0]));
+      d.appendChild(el("div", "l", x[1]));
+      b1.appendChild(d);
+    });
+    k.appendChild(b1);
+    var b2 = el("div", "big");
+    var g = el("div", gap >= 8 ? "gap-card" : null);
+    g.appendChild(el("div", "n", (gap >= 0 ? "−" : "+") + Math.abs(Math.round(gap))));
+    g.appendChild(el("div", "l", "Average points between what bookers reported and what the photographs show"));
+    b2.appendChild(g);
+    k.appendChild(b2);
+    m.appendChild(k);
+
+    var flagged = S.visits.slice().sort(function (a, b) {
+      return (b.claimPct - b.purityPct) - (a.claimPct - a.purityPct);
+    });
+
+    var t = el("div", "card");
+    t.appendChild(el("h2", null, "Widest gaps first"));
+    flagged.forEach(function (v) {
+      var it = el("div", "item");
+      it.style.alignItems = "center";
+      if (v.thumb) {
+        var im = el("img");
+        im.src = v.thumb; im.alt = "";
+        im.style.width = "44px"; im.style.height = "44px"; im.style.objectFit = "cover";
+        im.style.borderRadius = "6px"; im.style.flex = "0 0 auto";
+        it.appendChild(im);
+      }
+      var nm = el("div", "nm");
+      nm.style.flex = "1 1 auto";
+      nm.appendChild(document.createTextNode(v.storeName));
+      var sm = el("small"); sm.className = "dim";
+      sm.textContent = v.bookerName + " · said " + v.claimPct + "%, shows " + v.purityPct + "%";
+      nm.appendChild(sm);
+      it.appendChild(nm);
+      var d = v.claimPct - v.purityPct;
+      it.appendChild(el("span", "chip " + (d >= 15 ? "bad" : d >= 8 ? "warn" : "good"),
+        (d > 0 ? "−" : "+") + Math.abs(d)));
+      t.appendChild(it);
+    });
+    m.appendChild(t);
+
+    var comp = {};
+    S.visits.forEach(function (v) {
+      (v.competitor || []).concat(v.other || []).forEach(function (x) {
+        comp[x.name] = (comp[x.name] || 0) + (x.facings || 1);
+      });
+    });
+    var names = Object.keys(comp).sort(function (a, b) { return comp[b] - comp[a]; });
+    if (names.length) {
+      var f = el("div", "card");
+      f.appendChild(el("h2", null, "Foreign product found across the route"));
+      var l = el("div", "list");
+      names.forEach(function (nm2) {
+        var it = el("div", "item miss");
+        it.appendChild(el("div", "nm", nm2));
+        it.appendChild(el("div", "fc", "×" + comp[nm2]));
+        l.appendChild(it);
+      });
+      f.appendChild(l);
+      f.appendChild(el("p", "dim", "Every facing here sits inside a cooler the bottler paid for and placed."));
+      m.appendChild(f);
+    }
+
+    var any = S.visits.some(function (v) { return v.mode === "sim"; });
+    if (any) {
+      m.appendChild(el("div", "banner",
+        "Some readings on this page are simulated, not analysed from a photograph. They are marked on each capture."));
+    }
+  }
+
+  /* ---------------------------------------------------------------- wiring */
+
+  $("shot").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (f) handleShot(f);
+  });
+  $("tab-route").onclick = function () { S.tab = "route"; S.pending = null; render(); };
+  $("tab-dash").onclick = function () { S.tab = "dash"; S.pending = null; render(); };
+  $("tab-out").onclick = function () {
+    S.user = null; S.userKey = null; S.ready = null; S.storeId = null;
+    S.claim = null; S.pending = null; S.tab = "route"; render();
+  };
+
+  bridge();
+  render();
+})();
+</script>
